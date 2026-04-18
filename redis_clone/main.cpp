@@ -52,29 +52,6 @@ int main() {
 				std::cout << "ERROR -> to insert into db you have to provide key!" << std::endl;
 				continue;
 			}
-			if (db.count(key)) {
-				std::string current = db[key];
-				std::cout << "The value assigned to this key already exists -> " << "| " << current << " | Do you want to replace it ? (Y/N) : ";
-				std::string response;
-				std::getline(std::cin, response);
-				for (auto& r : response) r = toupper(r);
-
-				if (response == "Y" || response == "YES" || response == "YE") {
-					if (!(std::getline(ss >> std::ws, val))) {
-						std::cout << "ERROR -> to insert into databse you have to provide value!" << std::endl;
-						continue;
-					}
-					db[key] = val;
-					std::cout << "| " << db[key] << " |" << " is correctly added into database!" << std::endl;
-				}
-				else if(response == "N" || response=="NO") {
-					std::cout << "No changes made!" << std::endl;
-				}
-				else {
-					std::cout << "Unknown command! Try again!" << std::endl;
-				}
-				continue;
-			}
 
 			if (!(std::getline(ss >> std::ws, val))) {
 				std::cout << "ERROR -> to insert into databse you have to provide value!" << std::endl;
