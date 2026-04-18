@@ -18,8 +18,8 @@ void showTutorial() {
 }
 
 void saveToFile(std::unordered_map<std::string, std::string>& db) {
-	std::fstream plik;
-	plik.open("database.txt", std::ios::out | std::ios::trunc);		// trunc for clearing file before saving
+	std::ofstream plik;
+	plik.open("database.txt");		// trunc for clearing file before saving
 	if (plik.is_open()) {
 		for (auto& [key, val] : db) {
 			plik << key << " " << val << "\n";
@@ -32,8 +32,8 @@ void saveToFile(std::unordered_map<std::string, std::string>& db) {
 }
 
 void loadFromFile(std::unordered_map<std::string, std::string>& db) {
-	std::fstream plik;
-	plik.open("database.txt", std::ios::in);	// read only
+	std::ifstream plik;
+	plik.open("database.txt");	// read only
 	if (plik.is_open()) {
 		std::string str;
 		while (std::getline(plik, str)) {
@@ -48,10 +48,21 @@ void loadFromFile(std::unordered_map<std::string, std::string>& db) {
 	}
 }
 
-void clearFile() {
-	std::fstream plik;
-	plik.open("databse.txt", std::ios::trunc);
-	if (plik.is_open()) plik.close();
+void clearFile(std::unordered_map<std::string, std::string>& db) {
+	std::cout << "This operation will delete all data from database. Continue? (Y/N): ";
+	std::string str;
+	std::getline(std::cin, str);
+	for (auto& s : str) s = toupper(s);
+
+	if (str == "YES" || str == "Y") {
+		db.clear();
+		saveToFile(db);
+		std::cout << "Database cleared!\n";
+	}
+	else {
+		std::cout << "Operation cancelled!\n";
+	}
+	
 }
 
 void setHandler(std::unordered_map<std::string, std::string>&db, std::stringstream& ss) {
@@ -150,8 +161,7 @@ int main() {
 			delHandler(db, ss);
 		}
 		else if (cmd == "NEW") {
-			db.clear();
-			clearFile();
+			clearFile(db);
 		}
 		else {
 			std::cout << "Command unknown, check tutorial by typing T\n";
