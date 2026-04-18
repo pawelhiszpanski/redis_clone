@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37203.1 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "redis_clone", "redis_clone\redis_clone.vcxproj", "{10EA4845-6A8E-4A7D-B1F1-4F77FD735711}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{10EA4845-6A8E-4A7D-B1F1-4F77FD735711}.Debug|x64.ActiveCfg = Debug|x64
+		{10EA4845-6A8E-4A7D-B1F1-4F77FD735711}.Debug|x64.Build.0 = Debug|x64
+		{10EA4845-6A8E-4A7D-B1F1-4F77FD735711}.Debug|x86.ActiveCfg = Debug|Win32
+		{10EA4845-6A8E-4A7D-B1F1-4F77FD735711}.Debug|x86.Build.0 = Debug|Win32
+		{10EA4845-6A8E-4A7D-B1F1-4F77FD735711}.Release|x64.ActiveCfg = Release|x64
+		{10EA4845-6A8E-4A7D-B1F1-4F77FD735711}.Release|x64.Build.0 = Release|x64
+		{10EA4845-6A8E-4A7D-B1F1-4F77FD735711}.Release|x86.ActiveCfg = Release|Win32
+		{10EA4845-6A8E-4A7D-B1F1-4F77FD735711}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {A63A94DA-73CB-4C73-AE0A-0AAC1D3E9D27}
+	EndGlobalSection
+EndGlobal
