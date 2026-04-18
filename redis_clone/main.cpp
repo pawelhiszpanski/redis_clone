@@ -1,4 +1,5 @@
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 
@@ -21,10 +22,32 @@ void showTutorial() {
 int main() {
 	std::unordered_map<std::string, std::string> dataBase;
 	std::cout << "Welcome to Redis Clone!" << std::endl;
-	std::cout << "Press 'T' to show tutorial" << std::endl;
-	
+	std::cout << std::endl;
+	std::string command = "";
+	bool end = false;
 
+	while (!end) {
+		std::cout << "Press 'T' to show tutorial" << std::endl;
+		std::cout << "Enter command: ";
+		std::getline(std::cin, command);
 
+		if (command == "T") {
 
+		}
+		else if (command == "EXIT" || command == "QUIT") {
+
+		}
+		else if (command == "SET") {
+			
+
+		}
+		else if (command == "GET") {
+		
+		}
+		else if (command == "DEL") {
+			
+		}
+
+	}
 	return 0;
 }
