@@ -3,8 +3,7 @@
 #include <string>
 #include <unordered_map>
 #include <fstream>
-
-using namespace std;
+#include <ctime>
 
 class RedisValue {
 public:
@@ -33,7 +32,7 @@ void showTutorial() {
 	std::cout << "    Example: EXPIRE key seconds\n";
 }
 
-bool isExpired(std::unordered_map<std::string, RedisValue>& db, std::string key) {
+bool isExpired(std::unordered_map<std::string, RedisValue>& db, std::string& key) {
 	auto it = db.find(key);
 	if (it == db.end()) return false;	// key not in database
 
@@ -47,11 +46,11 @@ bool isExpired(std::unordered_map<std::string, RedisValue>& db, std::string key)
 }
 
 void saveToFile(std::unordered_map<std::string, RedisValue>& db) {
+	expireAll(db);
 	std::ofstream plik;
 	plik.open("database.txt");
 	if (plik.is_open()) {
-		for (auto& [key, val] : db) {
-			if (isExpired(db, key)) continue;
+		for (const auto& [key, val] : db) {
 			plik << key << " " << val.expireAt << " " << val.value << "\n";
 		}
 		plik.close();
@@ -153,37 +152,45 @@ void exitHandler(std::unordered_map<std::string, RedisValue>& db, bool&end) {
 }
 
 void existHandler(std::unordered_map<std::string, RedisValue>& db , std::stringstream& ss) {
-	string key;
+	std::string key;
 	if (!(ss >> key)) {
 		std::cout << "ERROR -> key must be provided!\n";
 	}
 	else {
 		if (db.count(key) && !isExpired(db, key)) {
-			cout << "Key exist\n";
+			std::cout << "Key exist\n";
 			return;
 		}
-		cout << "Key do NOT exist\n";
+		std::cout << "Key do NOT exist\n";
 	}
 }
 
 void expireAll(std::unordered_map<std::string, RedisValue>& db) {
-	for (auto [key, val] : db) {		//check all keys -> mainly for db.size()
-		if (isExpired(db, key)) {};
+	//check all keys -> mainly for db.size()
+	auto it = db.begin();
+	while (it != db.end()) {
+		long long currentTime = std::time(nullptr);
+		if (it->second.expireAt > 0 && currentTime >= it->second.expireAt) {	// if expiring time is set and current time is greater
+			it = db.erase(it);		// it becomes pointer to next valid element
+		}
+		else {
+			it++;
+		}
 	}
 	return;
 }
 
 void dbsizeHandler(std::unordered_map<std::string, RedisValue>& db) {
 	expireAll(db);
-	cout << "Database hold " << db.size() << " elements\n";
+	std::cout << "Database hold " << db.size() << " elements\n";
 }
 
 void keysHandler(std::unordered_map<std::string, RedisValue>& db) {
+	expireAll(db);
 	int i = 1;
-	cout << "Keys in database:\n";
-	for (auto [key, val] : db) {
-		if (isExpired(db, key)) continue;
-		cout << i++ << ". " << key << "\n";
+	std::cout << "Keys in database:\n";
+	for (const auto& [key, val] : db) {
+		std::cout << i++ << ". " << key << "\n";
 	}
 	if (i == 1) std::cout << "-----\n";
 }
@@ -229,6 +236,7 @@ void expireHandler(std::unordered_map<std::string, RedisValue>& db, std::strings
 	else {
 		it->second.expireAt = std::time(nullptr) + time;
 		std::cout << "Expire time set succesfully!\n";
+		saveToFile(db);		// if user will set expire date then computer crash could not save the changes
 	}
 	return;
 }
@@ -258,7 +266,7 @@ int main() {
 		if (cmd == "T") {
 			showTutorial();
 		}
-		else if (cmd == "CLEAR") {
+		else if (cmd == "CLEAR" || cmd == "C") {
 			system("cls");
 		}
 		else if (cmd == "EXIT" || cmd == "QUIT" || cmd =="Q") {
@@ -276,10 +284,10 @@ int main() {
 		else if (cmd == "NEW") {
 			clearFile(db);
 		}
-		else if (cmd == "EXISTS") {
+		else if (cmd == "EXISTS" || cmd == "EXIST") {
 			existHandler(db, ss);
 		}
-		else if (cmd == "DBSIZE") {
+		else if (cmd == "DBSIZE" || cmd == "SIZE") {
 			dbsizeHandler(db);
 		}
 		else if (cmd == "KEYS") {
@@ -288,7 +296,7 @@ int main() {
 		else if (cmd == "RENAME") {
 			renameHandler(db, ss);
 		}
-		else if (cmd == "EXPIRE") {
+		else if (cmd == "EXPIRE" || cmd == "EXPIRES") {
 			expireHandler(db, ss);
 		}
 		else {
