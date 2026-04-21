@@ -45,15 +45,42 @@ bool isExpired(std::unordered_map<std::string, RedisValue>& db, std::string& key
 	return false;			// data is still valid
 }
 
+void expireAll(std::unordered_map<std::string, RedisValue>& db) {
+	//check all keys -> mainly for db.size()
+	auto it = db.begin();
+	while (it != db.end()) {
+		long long currentTime = std::time(nullptr);
+		if (it->second.expireAt > 0 && currentTime >= it->second.expireAt) {	// if expiring time is set and current time is greater
+			it = db.erase(it);		// it becomes pointer to next valid element
+		}
+		else {
+			it++;
+		}
+	}
+	return;
+}
+
 void saveToFile(std::unordered_map<std::string, RedisValue>& db) {
 	expireAll(db);
-	std::ofstream plik;
-	plik.open("database.txt");
-	if (plik.is_open()) {
+	std::ofstream file;			
+	file.open("database.txt");	// ofstream clear the file but database is already in RAM cause of loadFromFile() in main
+	if (file.is_open()) {
 		for (const auto& [key, val] : db) {
-			plik << key << " " << val.expireAt << " " << val.value << "\n";
+			file << key << " " << val.expireAt << " " << val.value << "\n";
 		}
-		plik.close();
+		file.close();
+	}
+	else {
+		std::cout << "ERROR -> unable to open database file!\n";
+	}
+}
+
+void appendOnlyFile(std::string key, std::string value, long long expireAt) {
+	std::ofstream file;
+	file.open("database.txt", std::ios::app);
+	if (file.is_open()) {
+		file << key << " " << expireAt << " " << value << "\n";
+		file.close();
 	}
 	else {
 		std::cout << "ERROR -> unable to open database file!\n";
@@ -61,11 +88,11 @@ void saveToFile(std::unordered_map<std::string, RedisValue>& db) {
 }
 
 void loadFromFile(std::unordered_map<std::string, RedisValue>& db) {
-	std::ifstream plik;
-	plik.open("database.txt");	// read only
-	if (plik.is_open()) {
+	std::ifstream file;
+	file.open("database.txt");	// read only
+	if (file.is_open()) {
 		std::string str;
-		while (std::getline(plik, str)) {
+		while (std::getline(file, str)) {
 			if (str.empty()) continue;
 			std::stringstream ss(str);
 			std::string key, val;
@@ -75,7 +102,10 @@ void loadFromFile(std::unordered_map<std::string, RedisValue>& db) {
 				db[key] = { val, time };
 			}
 		}
-		plik.close();
+		file.close();
+	}
+	else {
+		std::cout << "ERROR -> unable to open database file!\n";
 	}
 }
 
@@ -102,7 +132,6 @@ void setHandler(std::unordered_map<std::string, RedisValue>& db, std::stringstre
 		std::cout << "ERROR -> to insert into db you have to provide key!\n";
 		return;
 	}
-
 	if (!(std::getline(ss >> std::ws, val))) {
 		std::cout << "ERROR -> to insert into databse you have to provide value!\n";
 		return;
@@ -163,21 +192,6 @@ void existHandler(std::unordered_map<std::string, RedisValue>& db , std::strings
 		}
 		std::cout << "Key do NOT exist\n";
 	}
-}
-
-void expireAll(std::unordered_map<std::string, RedisValue>& db) {
-	//check all keys -> mainly for db.size()
-	auto it = db.begin();
-	while (it != db.end()) {
-		long long currentTime = std::time(nullptr);
-		if (it->second.expireAt > 0 && currentTime >= it->second.expireAt) {	// if expiring time is set and current time is greater
-			it = db.erase(it);		// it becomes pointer to next valid element
-		}
-		else {
-			it++;
-		}
-	}
-	return;
 }
 
 void dbsizeHandler(std::unordered_map<std::string, RedisValue>& db) {
@@ -263,7 +277,7 @@ int main() {
 		ss >> cmd;
 		for (auto& c : cmd) c = toupper(c);		
 
-		if (cmd == "T") {
+		if (cmd == "T" || cmd == "TUTORIAL") {
 			showTutorial();
 		}
 		else if (cmd == "CLEAR" || cmd == "C") {
