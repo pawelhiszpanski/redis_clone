@@ -97,7 +97,16 @@ void loadFromFile(std::unordered_map<std::string, RedisValue>& db) {
 			std::stringstream ss(str);
 			std::string key, val;
 			long long time;
-			if (ss >> key >> time) {
+			if (ss >> key) {
+				if (key == "DELETE") {
+					std::string to_delete;
+					if (ss >> to_delete) {
+						db.erase(to_delete);
+					}
+					continue;
+				}
+			}
+			if (ss >> time) {
 				std::getline(ss >> std::ws, val);
 				db[key] = { val, time };
 			}
@@ -137,8 +146,9 @@ void setHandler(std::unordered_map<std::string, RedisValue>& db, std::stringstre
 		return;
 	}
 	db[key] = { val, 0 };	//  at first data never expire
-	std::cout << "| " << db[key].value << " |" << " is correctly added into database!\n";
-	saveToFile(db);
+	appendOnlyFile(key, val, 0);
+	std::cout << "| " << val << " |" << " is correctly added into database!\n";
+	//saveToFile(db);
 }
 
 void getHandler(std::unordered_map<std::string, RedisValue>& db, std::stringstream& ss) {
@@ -156,6 +166,18 @@ void getHandler(std::unordered_map<std::string, RedisValue>& db, std::stringstre
 	}
 }
 
+void appendDelete(std::string key) {
+	std::ofstream file;
+	file.open("database.txt", std::ios::app);
+	if (file.is_open()) {
+		file << "DELETE " << key << "\n";
+		file.close();
+	}
+	else {
+		std::cout << "ERROR -> unable to open database file!\n";
+	}
+}
+
 void delHandler(std::unordered_map<std::string, RedisValue>& db, std::stringstream& ss) {
 	std::string key;
 	if (!(ss >> key)) {
@@ -169,10 +191,11 @@ void delHandler(std::unordered_map<std::string, RedisValue>& db, std::stringstre
 		else {
 			RedisValue removed = db.at(it->first);
 			db.erase(it);
+			appendDelete(key);		// write at the end of file that we have to delete such key instead of saving whole file
 			std::cout << "| " << removed.value << " |" << " was correctly erased from database!\n";
 		}
 	}
-	saveToFile(db);
+	//saveToFile(db);
 }
 
 void exitHandler(std::unordered_map<std::string, RedisValue>& db, bool&end) {
@@ -228,7 +251,9 @@ void renameHandler(std::unordered_map<std::string, RedisValue>& db, std::strings
 		db.erase(it);
 		db[new_key] = tmp;
 		std::cout << "Key changed succesfully\n";
-		saveToFile(db);
+		appendDelete(old_key);				// to avoid returning old key after restart
+		appendOnlyFile(new_key, tmp.value, tmp.expireAt);
+		//saveToFile(db);
 	}
 }
 
@@ -250,7 +275,8 @@ void expireHandler(std::unordered_map<std::string, RedisValue>& db, std::strings
 	else {
 		it->second.expireAt = std::time(nullptr) + time;
 		std::cout << "Expire time set succesfully!\n";
-		saveToFile(db);		// if user will set expire date then computer crash could not save the changes
+		//saveToFile(db);		// if user will set expire date then computer crash could not save the changes
+		appendOnlyFile(key, it->second.value, it->second.expireAt);
 	}
 	return;
 }
