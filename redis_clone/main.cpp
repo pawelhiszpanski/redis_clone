@@ -5,6 +5,7 @@
 #include <fstream>
 #include <ctime>
 #include <list>
+#include <algorithm>
 #define MAX_SIZE 200
 
 class RedisValue {
@@ -61,8 +62,8 @@ void expireAll(std::unordered_map<std::string, RedisValue>& db, std::list<std::s
 	while (it != db.end()) {
 		long long currentTime = std::time(nullptr);
 		if (it->second.expireAt > 0 && currentTime >= it->second.expireAt) {	// if expiring time is set and current time is greater
-			it = db.erase(it);		// it becomes pointer to next valid element
 			lru.remove(it->first);
+			it = db.erase(it);		// it becomes pointer to next valid element	
 		}
 		else {
 			it++;
@@ -118,7 +119,7 @@ void loadFromFile(std::unordered_map<std::string, RedisValue>& db, std::list<std
 					std::string to_delete;
 					if (ss >> to_delete) {
 						db.erase(to_delete);
-						auto it = std::find(lru.begin(), lru.end(), to_delete);
+						auto it = find(lru.begin(), lru.end(), to_delete);
 						if (it != lru.end()) {
 							lru.erase(it);
 						}
@@ -221,7 +222,9 @@ void getHandler(std::unordered_map<std::string, RedisValue>& db, std::stringstre
 	}
 	else {
 		auto it_lru = find(lru.begin(), lru.end(), key);
-		lru.erase(it_lru);		// deleting from current pos
+		if (it_lru != lru.end()) {
+			lru.erase(it_lru);
+		}
 		lru.push_front(key);
 		std::cout << "| " << it->second.value << " |\n";
 	}
@@ -242,8 +245,10 @@ void delHandler(std::unordered_map<std::string, RedisValue>& db, std::stringstre
 			db.erase(it);
 			appendDelete(key);		// write at the end of file that we have to delete such key instead of saving whole file
 
-			auto it_lru = find(lru.begin(), lru.end(), key);		// deleting from LRU list
-			lru.erase(it_lru);
+			auto it_lru = find(lru.begin(), lru.end(), key);		// deleting from lru list
+			if (it_lru != lru.end()) {
+				lru.erase(it_lru);
+			}
 
 			std::cout << "| " << removed.value << " |" << " was correctly erased from database!\n";
 		}
@@ -263,8 +268,10 @@ void existHandler(std::unordered_map<std::string, RedisValue>& db , std::strings
 	}
 	else {
 		if (db.count(key) && !isExpired(db, key, lru)) {
-			auto it = find(lru.begin(), lru.end(), key);
-			lru.erase(it);		// deleting from current pos
+			auto it = std::find(lru.begin(), lru.end(), key);
+			if (it != lru.end()) {
+				lru.erase(it);
+			}
 			lru.push_front(key);
 			std::cout << "Key exist\n";
 			return;
@@ -306,8 +313,10 @@ void renameHandler(std::unordered_map<std::string, RedisValue>& db, std::strings
 		RedisValue tmp = db.at(it->first);		// copy of redis structure of key 'it'
 		db.erase(it);
 		db[new_key] = tmp;
-		auto it = find(lru.begin(), lru.end(), old_key);
-		lru.erase(it);		// deleting from current pos
+		auto it_key = find(lru.begin(), lru.end(), old_key);
+		if (it_key != lru.end()) {
+			lru.erase(it_key);		// deleting from current pos
+		}
 		lru.push_front(new_key);
 		std::cout << "Key changed succesfully\n";
 		appendDelete(old_key);				// to avoid returning old key after restart
