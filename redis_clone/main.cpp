@@ -30,6 +30,8 @@ void showTutorial() {
 	std::cout << "    Example: RENAME old_key new_key\n";
 	std::cout << "11. To set a time-to-live for an existing key in seconds, use EXPIRE\n";
 	std::cout << "    Example: EXPIRE key seconds\n";
+	std::cout << "12. To compress the database file and free up disk space, use REWRITE\n";
+	std::cout << "    Example: REWRITE\n";
 }
 
 bool isExpired(std::unordered_map<std::string, RedisValue>& db, std::string& key) {
@@ -73,6 +75,11 @@ void saveToFile(std::unordered_map<std::string, RedisValue>& db) {
 	else {
 		std::cout << "ERROR -> unable to open database file!\n";
 	}
+}
+
+void rewriteAofHandler(std::unordered_map<std::string, RedisValue>& db) {
+	saveToFile(db);
+	std::cout << "File succesfully compressed!\n";
 }
 
 void appendOnlyFile(std::string key, std::string value, long long expireAt) {
@@ -338,6 +345,9 @@ int main() {
 		}
 		else if (cmd == "EXPIRE" || cmd == "EXPIRES") {
 			expireHandler(db, ss);
+		}
+		else if (cmd == "REWRITE" || cmd == "REWRITEAOF") {
+			rewriteAofHandler(db);
 		}
 		else {
 			std::cout << "Command unknown, check tutorial by typing T\n";
