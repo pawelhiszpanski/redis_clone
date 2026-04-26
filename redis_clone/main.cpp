@@ -12,6 +12,7 @@ class RedisValue {
 public:
 	std::string value;
 	long long expireAt;
+	std::list<std::string>::iterator lru_ptr;		// faster system of searching for ptr
 };
 
 void showTutorial() {
@@ -44,26 +45,27 @@ void showTutorial() {
 
 bool isExpired(std::unordered_map<std::string, RedisValue>& db, std::string& key, std::list<std::string>& lru) {
 	auto it = db.find(key);
-	if (it == db.end()) return false;	// key not in database
+	if (it == db.end()) return false;				// key not in database
 
 	long long currentTime = std::time(nullptr);
 
 	if (it->second.expireAt > 0 && currentTime > it->second.expireAt) {
-		lru.remove(key);
+		lru.erase(it->second.lru_ptr);
 		db.erase(it);
-		return true;		// our data from database expired so we remove
+		return true;								// our data from database expired so we remove
 	}
-	return false;			// data is still valid
+	return false;									// data is still valid
 }
 
 void expireAll(std::unordered_map<std::string, RedisValue>& db, std::list<std::string>& lru) {
 	//check all keys -> mainly for db.size()
 	auto it = db.begin();
+	long long currentTime = std::time(nullptr);									// before the loop to make the program faster, such time difference should not change so much
 	while (it != db.end()) {
-		long long currentTime = std::time(nullptr);
+		//long long currentTime = std::time(nullptr);
 		if (it->second.expireAt > 0 && currentTime >= it->second.expireAt) {	// if expiring time is set and current time is greater
-			lru.remove(it->first);
-			it = db.erase(it);		// it becomes pointer to next valid element	
+			lru.erase(it->second.lru_ptr);
+			it = db.erase(it);													// it becomes pointer to next valid element	
 		}
 		else {
 			it++;
@@ -75,7 +77,7 @@ void expireAll(std::unordered_map<std::string, RedisValue>& db, std::list<std::s
 void saveToFile(std::unordered_map<std::string, RedisValue>& db, std::list<std::string>& lru) {
 	expireAll(db, lru);
 	std::ofstream file;			
-	file.open("database.txt");	// ofstream clear the file but database is already in RAM cause of loadFromFile() in main
+	file.open("database.txt");									// ofstream clear the file but database is already in RAM cause of loadFromFile() in main
 	if (file.is_open()) {
 		for (const auto& [key, val] : db) {
 			file << key << " " << val.expireAt << " " << val.value << "\n";
@@ -88,13 +90,13 @@ void saveToFile(std::unordered_map<std::string, RedisValue>& db, std::list<std::
 }
 
 void rewriteAofHandler(std::unordered_map<std::string, RedisValue>& db, std::list<std::string>& lru) {
-	saveToFile(db, lru);
+	saveToFile(db, lru);										// deleting all double DEL or SET occurring
 	std::cout << "File succesfully compressed!\n";
 }
 
 void appendOnlyFile(std::string key, std::string value, long long expireAt) {
 	std::ofstream file;
-	file.open("database.txt", std::ios::app);
+	file.open("database.txt", std::ios::app);					// std::ios::app for appending at the end of the file 
 	if (file.is_open()) {
 		file << key << " " << expireAt << " " << value << "\n";
 		file.close();
@@ -106,7 +108,7 @@ void appendOnlyFile(std::string key, std::string value, long long expireAt) {
 
 void loadFromFile(std::unordered_map<std::string, RedisValue>& db, std::list<std::string>& lru) {
 	std::ifstream file;
-	file.open("database.txt");	// read only
+	file.open("database.txt");										// read only
 	if (file.is_open()) {
 		std::string str;
 		while (std::getline(file, str)) {
@@ -118,31 +120,37 @@ void loadFromFile(std::unordered_map<std::string, RedisValue>& db, std::list<std
 				if (key == "DELETE") {
 					std::string to_delete;
 					if (ss >> to_delete) {
-						db.erase(to_delete);
-						auto it = find(lru.begin(), lru.end(), to_delete);
-						if (it != lru.end()) {
-							lru.erase(it);
-						}
+						auto it = db.find(to_delete);
+						if (it != db.end()) {						// checking for eventually errors
+							lru.erase(it->second.lru_ptr);			// first deleting it->... then it itself 
+							db.erase(it);
+						}	
 					}
 					continue;
 				}
 			}
 			if (ss >> time) {
 				std::getline(ss >> std::ws, val);
-				db[key] = { val, time };
-
-				auto it = find(lru.begin(), lru.end(), key);
-
-				if (it != lru.end()) {		// key already was used, e.g. RENAME or second SET
-					lru.erase(it);
+				auto it = db.find(key);
+				if (it != db.end()) {								// if key already exist in database, e.g in RENAME or SET
+					if (it->second.lru_ptr != lru.end()) {			// to make sure its safe
+						lru.erase(it->second.lru_ptr);
+					}
+					lru.push_front(key);
+																	// overwriting elements at key
+					it->second.lru_ptr = lru.begin();
+					it->second.value = val;
+					it->second.expireAt = time;
 				}
-				else if (lru.size() >= MAX_SIZE) {		// if file bigger than size
-					std::string tmp = lru.back();
-					db.erase(tmp);
-					lru.pop_back();
+				else {												// key is completely new
+					if (lru.size() >= MAX_SIZE) {
+						std::string key_to_delete = lru.back();
+						lru.pop_back();
+						db.erase(key_to_delete);
+					}
+					lru.push_front(key);
+					db[key] = { val, time, lru.begin() };
 				}
-
-				lru.push_front(key);		// in every scenario we push key to the front
 			}
 		}
 		file.close();
@@ -157,8 +165,8 @@ void clearFile(std::unordered_map<std::string, RedisValue>& db, std::list<std::s
 
 	if (str == "YES" || str == "Y") {
 		db.clear();
-		saveToFile(db, lru);
-		lru.clear();		// clearing the list as well
+		saveToFile(db, lru);						// clearing whole .txt file
+		lru.clear();								// clearing the list as well
 		std::cout << "Database cleared!\n";
 	}
 	else {
@@ -187,25 +195,30 @@ void setHandler(std::unordered_map<std::string, RedisValue>& db, std::stringstre
 	if (!(std::getline(ss >> std::ws, val))) {
 		std::cout << "ERROR -> to insert into databse you have to provide value!\n";
 		return;
+	}													
+	auto it = db.find(key);								// list handle
+	if (it != db.end()) {								// if key exist
+		if (it->second.lru_ptr != lru.end()) {			// to make sure its safe
+			lru.erase(it->second.lru_ptr);
+		}
+		lru.push_front(key);
+														// overwriting elements at key
+		it->second.lru_ptr = lru.begin();
+		it->second.value = val;
+		it->second.expireAt = 0;						// set reset the expiring time
 	}
-	db[key] = { val, 0 };	//  at first data never expire
-	appendOnlyFile(key, val, 0);
-
-	auto it = find(lru.begin(), lru.end(), key);		// list handle
-	if (it == lru.end()) {		// not in list atp
-		if (lru.size() + 1 > MAX_SIZE) {
+	else {												// key is completely new
+		if (lru.size() >= MAX_SIZE) {
 			std::string key_to_delete = lru.back();
 			lru.pop_back();
 			db.erase(key_to_delete);
-			appendDelete(key_to_delete);		// save to file deleted element
+			appendDelete(key_to_delete);
 		}
 		lru.push_front(key);
+		db[key] = { val, 0, lru.begin() };				// making new database element
 	}
-	else {		// already was in list -> move to the begin
-		// we are not popping back if element was in list because we dont add new element, just recreating value
-		lru.erase(it);		// deleting from current pos
-		lru.push_front(key);
-	}
+
+	appendOnlyFile(key, val, 0);
 	std::cout << "| " << val << " |" << " is correctly added into database!\n";
 	//saveToFile(db);
 }
@@ -221,11 +234,11 @@ void getHandler(std::unordered_map<std::string, RedisValue>& db, std::stringstre
 		std::cout << "ERROR -> key does NOT exist in our database!\n";
 	}
 	else {
-		auto it_lru = find(lru.begin(), lru.end(), key);
-		if (it_lru != lru.end()) {
-			lru.erase(it_lru);
+		if (it->second.lru_ptr != lru.end()) {
+			lru.erase(it->second.lru_ptr);
 		}
 		lru.push_front(key);
+		it->second.lru_ptr = lru.begin();						// set the pointer to the beggining of the list
 		std::cout << "| " << it->second.value << " |\n";
 	}
 }
@@ -237,19 +250,17 @@ void delHandler(std::unordered_map<std::string, RedisValue>& db, std::stringstre
 	}
 	else {
 		auto it = db.find(key);
-		if (it == db.end() || isExpired(db, key, lru)) {		// if key exist in db
+		if (it == db.end() || isExpired(db, key, lru)) {			// if key exist in database
 			std::cout << "Cannot erase key! It does NOT exist!\n";
 		}
 		else {
 			RedisValue removed = db.at(it->first);
-			db.erase(it);
-			appendDelete(key);		// write at the end of file that we have to delete such key instead of saving whole file
-
-			auto it_lru = find(lru.begin(), lru.end(), key);		// deleting from lru list
-			if (it_lru != lru.end()) {
-				lru.erase(it_lru);
+			if (it->second.lru_ptr != lru.end()) {					// deleting from lru LIST first
+				lru.erase(it->second.lru_ptr);
 			}
+			db.erase(it);											// then deleting from MAP
 
+			appendDelete(key);										// write at the end of file that we have to delete such key instead of saving whole file
 			std::cout << "| " << removed.value << " |" << " was correctly erased from database!\n";
 		}
 	}
@@ -267,12 +278,13 @@ void existHandler(std::unordered_map<std::string, RedisValue>& db , std::strings
 		std::cout << "ERROR -> key must be provided!\n";
 	}
 	else {
-		if (db.count(key) && !isExpired(db, key, lru)) {
-			auto it = std::find(lru.begin(), lru.end(), key);
-			if (it != lru.end()) {
-				lru.erase(it);
+		auto it = db.find(key);									// O(1) because of hash
+		if (it != db.end() && !isExpired(db, key, lru)) {
+			if (it->second.lru_ptr != lru.end()) {				// if we have this pointer in our list -> it should be its just for being safe
+				lru.erase(it->second.lru_ptr);
 			}
-			lru.push_front(key);
+			lru.push_front(key);								// last recently used to the front
+			it->second.lru_ptr = lru.begin();
 			std::cout << "Key exist\n";
 			return;
 		}
@@ -310,16 +322,17 @@ void renameHandler(std::unordered_map<std::string, RedisValue>& db, std::strings
 		std::cout << "ERROR -> provided key does NOT exist!";
 	}
 	else {
-		RedisValue tmp = db.at(it->first);		// copy of redis structure of key 'it'
-		db.erase(it);
-		db[new_key] = tmp;
-		auto it_key = find(lru.begin(), lru.end(), old_key);
-		if (it_key != lru.end()) {
-			lru.erase(it_key);		// deleting from current pos
+		RedisValue tmp = it->second;									// copy of redis structure of key 'it'
+		if (it->second.lru_ptr != lru.end()) {
+			lru.erase(it->second.lru_ptr);								// deleting from current pos
 		}
+		db.erase(it);													// deleting from MAP
+		//auto it_key = find(lru.begin(), lru.end(), old_key);			// not important anymore cause of new structure lru_ptr
 		lru.push_front(new_key);
+		tmp.lru_ptr = lru.begin();
+		db[new_key] = tmp;
 		std::cout << "Key changed succesfully\n";
-		appendDelete(old_key);				// to avoid returning old key after restart
+		appendDelete(old_key);											// to avoid returning old key after restart
 		appendOnlyFile(new_key, tmp.value, tmp.expireAt);
 		//saveToFile(db);
 	}
@@ -337,13 +350,13 @@ void expireHandler(std::unordered_map<std::string, RedisValue>& db, std::strings
 		return;
 	}
 	auto it = db.find(key);
-	if (it == db.end() || isExpired(db, key, lru)) {		// key may expire till we check
+	if (it == db.end() || isExpired(db, key, lru)) {					// key may expire till we check
 		std::cout << "ERROR -> provided key does NOT exist\n";
 	}
 	else {
 		it->second.expireAt = std::time(nullptr) + time;
 		std::cout << "Expire time set succesfully!\n";
-		//saveToFile(db);		// if user will set expire date then computer crash could not save the changes
+		//saveToFile(db);
 		appendOnlyFile(key, it->second.value, it->second.expireAt);
 	}
 	return;
@@ -352,7 +365,7 @@ void expireHandler(std::unordered_map<std::string, RedisValue>& db, std::strings
 int main() {
 	std::cout << "Welcome to Redis Clone!\n";
 	std::unordered_map<std::string, RedisValue> db;
-	std::list<std::string> lru;			// monitoring last recently used element in case of too big size of db
+	std::list<std::string> lru;											// monitoring last recently used element in case of too big size of db
 	loadFromFile(db, lru);
 	std::string command = "";
 	bool end = false;
